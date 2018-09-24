@@ -355,9 +355,12 @@ class GeneratorUtils {
 
 	'''
 	
-	def generateExceptionHandler(EObject context, String variableName)'''
-	«IF variableName != 'exception'»exception = «variableName»;«ENDIF»
-	if(exception != NO_EXCEPTION) «IF ModelUtils.isInTryCatchFinally(context)»break«ELSE»return «variableName»«ENDIF»;'''
+	def generateExceptionHandler(EObject context, String variableName) {
+		'''
+			«IF variableName != 'exception'»exception = «variableName»;«ENDIF»
+			if(exception != NO_EXCEPTION) «IF ModelUtils.isInTryCatchFinally(context)»break«ELSE»return «variableName»«ENDIF»;
+		''' 
+	}
 	
 	def IGeneratorNode trim(IGeneratorNode stmt, boolean lastOccurance, Function<CharSequence, CharSequence> trimmer) {
 		if (stmt instanceof TextNode) {
@@ -390,10 +393,10 @@ class GeneratorUtils {
 		if(stmt instanceof CompositeGeneratorNode) {
 			val newChildren = stmt.children
 				.toList
-				.dropWhile[it instanceof NewLineNode]
+				.dropWhile[it instanceof NewLineNode || (it instanceof TextNode && (it as TextNode).text == "")]
 				.toList
 				.reverse
-				.dropWhile[it instanceof NewLineNode]
+				.dropWhile[it instanceof NewLineNode || (it instanceof TextNode && (it as TextNode).text == "")]
 				.toList
 				.reverse
 				.map[ it.noNewline ]

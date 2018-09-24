@@ -430,14 +430,14 @@ class StatementGenerator {
 				if (reference instanceof FunctionDefinition) {
 				// we're assigning the result of a function call to this variable
 				return '''
-					«generateFunctionCall(reference as Operation, codeFragmentProvider.create('''&«stmt.varRef.code»'''), expression)»;
+					«generateFunctionCall(reference as Operation, codeFragmentProvider.create('''&«stmt.varRef.code»'''), expression).noNewline.noTerminator»;
 				'''
 			} else if(reference instanceof NativeFunctionDefinition) {
 				if(reference.checked) {
-					return '''«reference.generateNativeFunctionCallChecked(codeFragmentProvider.create('''&«stmt.varRef.code»'''), expression)»'''
+					return '''«reference.generateNativeFunctionCallChecked(codeFragmentProvider.create('''&«stmt.varRef.code»'''), expression).noTerminator»;'''
 				}
 				else {
-					return '''«stmt.varRef.code» «stmt.operator.literal» «reference.generateNativeFunctionCallUnchecked(expression)»;'''
+					return '''«stmt.varRef.code» «stmt.operator.literal» «reference.generateNativeFunctionCallUnchecked(expression).noTerminator»;'''
 				}
 			}
 		} 
@@ -920,8 +920,9 @@ class StatementGenerator {
 	
 	@Traced def generateFunctionCall(Operation op, IGeneratorNode firstArg, ArgumentExpression args) {
 		'''
-		exception = «op.baseName»(«IF firstArg !== null»«firstArg.noTerminator»«IF !args.arguments.empty», «ENDIF»«ENDIF»«FOR arg : ModelUtils.getSortedArguments(op.parameters, args.arguments) SEPARATOR ', '»«arg.value.code.noTerminator»«ENDFOR»);
-		«generateExceptionHandler(args, 'exception')»'''
+			exception = «op.baseName»(«IF firstArg !== null»«firstArg.noTerminator»«IF !args.arguments.empty», «ENDIF»«ENDIF»«FOR arg : ModelUtils.getSortedArguments(op.parameters, args.arguments) SEPARATOR ', '»«arg.value.code.noTerminator»«ENDFOR»);
+			«generateExceptionHandler(args, 'exception')»
+		'''
 	}
 
 	private def inferType(EObject expr) {

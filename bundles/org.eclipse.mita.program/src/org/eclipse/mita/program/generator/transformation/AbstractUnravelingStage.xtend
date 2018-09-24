@@ -13,16 +13,20 @@
 
 package org.eclipse.mita.program.generator.transformation
 
+import org.eclipse.emf.ecore.EObject
+import org.eclipse.mita.base.expressions.BinaryExpression
+import org.eclipse.mita.base.expressions.ConditionalExpression
+import org.eclipse.mita.base.expressions.ElementReferenceExpression
+import org.eclipse.mita.base.expressions.Expression
+import org.eclipse.mita.base.expressions.ExpressionsFactory
+import org.eclipse.mita.base.expressions.LogicalOperator
 import org.eclipse.mita.program.AbstractStatement
 import org.eclipse.mita.program.ProgramBlock
 import org.eclipse.mita.program.ProgramFactory
 import org.eclipse.mita.program.SystemResourceSetup
 import org.eclipse.mita.program.VariableDeclaration
-import org.eclipse.emf.ecore.EObject
+import org.eclipse.mita.program.model.ModelUtils
 import org.eclipse.xtext.EcoreUtil2
-import org.eclipse.mita.base.expressions.ElementReferenceExpression
-import org.eclipse.mita.base.expressions.Expression
-import org.eclipse.mita.base.expressions.ExpressionsFactory
 
 abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 	
@@ -53,6 +57,56 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 	 */
 	abstract protected def boolean needsUnraveling(Expression expression)
 	
+	dispatch def getCondition(EObject obj, BinaryExpression logicalBinaryExpression) {
+		if(logicalBinaryExpression.leftOperand === obj || logicalBinaryExpression.leftOperand?.eAllContents.findFirst[it === obj] !== null) {
+			return null;
+		}
+		return getCondition(obj, logicalBinaryExpression, logicalBinaryExpression.operator);
+	}
+	
+	dispatch def getCondition(EObject obj, BinaryExpression logicalBinaryExpression, LogicalOperator op) {
+		val condition = EcoreUtil2.copy(logicalBinaryExpression.leftOperand);
+		copier.linkOrigin(condition, copier.getOrigin(logicalBinaryExpression.leftOperand));
+		if(logicalBinaryExpression.operator == LogicalOperator.AND) {
+			// only execute if left was true
+			return condition
+		} else {
+			// only execute if left was false
+			return ExpressionsFactory.eINSTANCE.createLogicalNotExpression => [
+				it.operand = condition;
+			]
+		}
+	}
+	dispatch def getCondition(EObject obj, BinaryExpression logicalBinaryExpression, Object op) {
+		return null;
+	}
+	
+	dispatch def getCondition(EObject obj, ConditionalExpression expr) {
+		if((#[expr.trueCase, expr.falseCase] + expr.trueCase?.eAllContents.toIterable ?: #[] + expr.falseCase?.eAllContents.toIterable ?: #[]).findFirst[it === obj] === null) {
+			return null;
+		}
+		val negate = expr.falseCase === obj || expr.falseCase?.eAllContents.findFirst[it === obj] !== null;
+		return getCondition(obj, expr, negate);
+	}
+	
+	dispatch def getCondition(EObject obj, ConditionalExpression expr, boolean negate) {
+		val condition = EcoreUtil2.copy(expr.condition);
+		copier.linkOrigin(condition, copier.getOrigin(expr.condition));
+		
+		if(negate) { 
+			return ExpressionsFactory.eINSTANCE.createLogicalNotExpression => [
+				it.operand = condition;
+			];	
+		} 
+		else {
+			return condition;
+		}
+	}
+	
+	dispatch def getCondition(EObject obj, Void nul) {
+		return null
+	}
+	
 	protected def void doUnravel(Expression obj) {
 		/* Unraveling means that we pull an expression out of its tree and place it in a variable created for
 		 * this expression beforehand. By default we use the original expression (the expression being unraveled)
@@ -67,15 +121,87 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 		 * 
 		 * If you want to change the name generated, override getUniqueVariableName.
 		 * If you need special behavior regarding the result variable itself, override createResultVariable. 
+		 * 
+		 * The variable is not initialized at first but only after it has been declared. 
+		 * This is the only way to allow for easy unraveling while correctly compiling f() && g()
 		 */
-		val resultVariable = createResultVariable(obj, unraveledInitialization);
-		val resultVariableReference = createResultVariableReference(resultVariable);
+		val resultVariable = createResultVariable(obj);
+		/* We create two references to the variable:
+		 * - One for usage in chained conditional evaluations, such as f() && g()
+		 * - One for the original location
+		 */
+		val resultVariableReference1 = createResultVariableReference(resultVariable);
+		val resultVariableReference2 = createResultVariableReference(resultVariable);
+		// This will initialize the variable
+		val initializationExpr = ExpressionsFactory.eINSTANCE.createAssignmentExpression();
+		initializationExpr.varRef = resultVariableReference1;
+		initializationExpr.expression = unraveledInitialization;
+		
+		val initialization = ProgramFactory.eINSTANCE.createExpressionStatement();
+		initialization.expression = initializationExpr;
+		
+		// conditional chained evaluation, such as f() && g(), is present only if we are in a BinaryExpression or a ConditionalExpression
+		val logicalBinaryExpression = EcoreUtil2.getContainerOfType(obj, BinaryExpression);
+		val conditionalExpression = EcoreUtil2.getContainerOfType(obj, ConditionalExpression);
+		// if both are not null, one must be contained in the other. We use the inner one here.
+		val conditionSource = if(logicalBinaryExpression !== null && conditionalExpression !== null) {
+			if(logicalBinaryExpression.eAllContents.findFirst[it === conditionalExpression] !== null) {
+				conditionalExpression;
+			}
+			else {
+				logicalBinaryExpression;
+			}
+		}
+		else {
+			logicalBinaryExpression ?: conditionalExpression;
+		}
+		
+		val initializationStmt = if(conditionSource !== null) {
+			val condition = getCondition(obj, conditionSource);
+			if(condition === null) {
+				initialization;
+			}
+			else {
+				val ifStmt = ProgramFactory.eINSTANCE.createIfStatement();
+				ifStmt.condition = condition;
+				ifStmt.then = ProgramFactory.eINSTANCE.createProgramBlock() => [ block |
+					block.content += initialization;
+				]
+				ifStmt;	
+			}
+		} else {
+			initialization;
+		}
+		
+//		val initializationStmt = if(logicalBinaryExpression !== null && logicalBinaryExpression.operator instanceof LogicalOperator) {
+//			if(logicalBinaryExpression.leftOperand === obj || logicalBinaryExpression.leftOperand?.eAllContents.findFirst[it === obj] !== null) {
+//				initialization;
+//			}
+//			else {
+//				val ifStmt = ProgramFactory.eINSTANCE.createIfStatement();
+//				ifStmt.condition = getCondition(obj, logicalBinaryExpression);
+//				ifStmt.then = ProgramFactory.eINSTANCE.createProgramBlock() => [ block |
+//					block.content += initialization;
+//				]
+//				ifStmt;
+//			}
+//		} else if(conditionalExpression !== null && (conditionalExpression.trueCase.eAllContents + conditionalExpression.falseCase.eAllContents).findFirst[it === obj] !== null) {
+//			val negate = conditionalExpression.falseCase === obj || conditionalExpression.falseCase?.eAllContents.findFirst[it === obj] !== null;
+//			val ifStmt = ProgramFactory.eINSTANCE.createIfStatement();
+//			ifStmt.condition = getCondition(conditionalExpression, negate);
+//			ifStmt.then = ProgramFactory.eINSTANCE.createProgramBlock() => [ block |
+//				block.content += initialization;
+//			]
+//			ifStmt;
+//		} else {
+//			initialization;
+//		}
 		
 		/* We have to find the insertion point for the resultVariable before we replace the unraveling object with the
 		 * reference to the result variable and thus make it impossible to find the original context.
 		 */
 		val originalContext = findOriginalContext(obj);
-		obj.replaceWith(resultVariableReference);
+		obj.replaceWith(resultVariableReference2);
 		
 		/* Inserting the result variable itself is a post transformation as it modifies the children
 		 * of its container and thus would lead to a ConcurrentModificationException.
@@ -86,6 +212,7 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 		 * will reference existing result variables.
 		 */
 		addPostTransformation([ insertNextToParentBlock(originalContext, true, resultVariable) ]);
+		addPostTransformation([ insertNextToParentBlock(resultVariable, false, initializationStmt) ]);
 	}
 	
 	protected def Expression createResultVariableReference(EObject resultVariable) {
@@ -107,11 +234,12 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 		return copy;
 	}
 	
-	protected def AbstractStatement createResultVariable(Expression unravelingObject, Expression initialization) {
+	protected def AbstractStatement createResultVariable(Expression unravelingObject) {
 		val resultVariableName = getUniqueVariableName(unravelingObject);
 		val resultVariable = ProgramFactory.eINSTANCE.createVariableDeclaration;
+		val resultVariableType = ModelUtils.toSpecifier(typeInferrer.infer(unravelingObject));
 		resultVariable.name = resultVariableName;
-		resultVariable.initialization = initialization;
+		resultVariable.typeSpecifier = resultVariableType;
 		return resultVariable;
 	}
 	

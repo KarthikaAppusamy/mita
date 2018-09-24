@@ -1,0 +1,39 @@
+/**
+ * Welcome to Eclipse Mita.
+ *
+ * Not sure what to do now?
+ * Check out the "Getting started" guide in the Eclipse help.
+ */
+
+package main;
+import platforms.xdk110;
+
+fn f(): bool {
+	print("1");
+	return true;
+}
+
+fn g(): bool {
+	print("2");
+	return false;
+}
+ 
+// should print: 12 12 1 11 1 12
+every 1 second { 
+	let a = f();
+	let b = g();
+	print(" "); 
+	if(f() && g()) {   
+	} 
+	print(" "); 
+	if(f() || g()) {  
+	} 
+	print(" ");
+	if(f() && (f() || g())) {
+	}
+	print(" ");
+	let c = f() ? true : g();
+	print(" ");
+	let d = f() ? g() : false;
+	println("");
+}
