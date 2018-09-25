@@ -85,7 +85,8 @@ setup alt5_bad : MyConnectivity {
 setup alt6_bad : MyConnectivity { 
 	/*XPECT errors ---
 		"Incompatible types: 'bool' can't be converted to 'int32'" at "true"
-		"Incompatible types: 'integer' can't be converted to 'bool'" at "20"
+		"Incompatible types: bool, int32" at "true"
+		"Incompatible types: bool, int32" at "true"
 	--- */
 	cfg05 = SomethingNamed(x = true, y = 20);
 } 
@@ -109,7 +110,11 @@ setup alt10_bad : MyConnectivity {
 	cfg05 = SomeStruct(10, 20);
 }
 setup alt11_bad : MyConnectivity { 
-	//XPECT errors --> "Incompatible types: 'string' can't be converted to 'int32'" at ""asdf""
+	/*XPECT errors ---
+		"Incompatible types: 'string' can't be converted to 'int32'" at ""asdf""
+		"Incompatible types: string, int32" at ""asdf""
+		"Incompatible types: string, int32" at ""asdf""
+	--- */
 	cfg05 = SomeStruct("asdf");
 }
 setup alt12_bad : MyConnectivity { 

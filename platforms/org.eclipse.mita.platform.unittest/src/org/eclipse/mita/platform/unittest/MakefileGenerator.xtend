@@ -37,7 +37,7 @@ class MakefileGenerator implements IPlatformMakefileGenerator {
 		.PHONY: clean build
 		
 		build:
-			mkdir -p $(BUILDDIR)
+			"mkdir" -p $(BUILDDIR)
 			$(CC) $(CCFLAGS) $(SOURCE_INCLUDES) -o$(BUILDDIR)/unittest $(SOURCE_FILES)
 		
 		clean:

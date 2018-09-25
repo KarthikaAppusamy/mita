@@ -399,4 +399,10 @@ public class ExpressionsTypeInferrer extends AbstractTypeSystemInferrer implemen
 		}
 		return inferTypeDispatch(specifier.getType());
 	}
+
+	@Override
+	public void setIsLinking(boolean val) {
+		// TODO Auto-generated method stub
+		
+	}
 }

@@ -160,6 +160,9 @@ class ArrayGenerator extends AbstractTypeGenerator {
 	}
 	
 	override generateExpression(TypeSpecifier type, EObject left, AssignmentOperator operator, EObject right) {
+		if(right === null) {
+			return codeFragmentProvider.create('''''');
+		}
 		val isReturnStmt = left instanceof ReturnStatement;
 		
 		val varNameLeft = if(left instanceof VariableDeclaration) {

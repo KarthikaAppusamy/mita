@@ -32,6 +32,9 @@ public interface ITypeSystemInferrer {
 	public static final String NOT_COMPATIBLE_CODE = "IncompatibleTypes";
 	public static final String NOT_INFERRABLE_TYPE_PARAMETER_CODE = "NotInferrableTypeParameter";
 
+	
+	public void setIsLinking(boolean val);
+	
 	public static class InferenceResult {
 
 		private Type type;
@@ -97,6 +100,10 @@ public interface ITypeSystemInferrer {
 		@Override
 		public InferenceResult infer(EObject object) {
 			return null;
+		}
+
+		@Override
+		public void setIsLinking(boolean val) {
 		}
 		
 	}

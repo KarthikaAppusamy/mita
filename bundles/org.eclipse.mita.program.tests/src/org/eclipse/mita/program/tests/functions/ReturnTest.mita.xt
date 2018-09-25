@@ -44,23 +44,38 @@ fn noRet() : bool {}
 
 fn incompatibleReturnTypes() : int32 {
 	if (true) {
-		// XPECT errors --> "The return type 'string' is not compatible with the operation's type 'int32'" at "return "";"
+		/* XPECT errors ---
+			"Incompatible types: string, int32" at """"
+			"Incompatible types: string, int32" at "return "";"
+			"The return type 'string' is not compatible with the operation's type 'int32'" at """"
+		--- */
 		return "";
 	} else {
 		return 18;
 	}
-	// XPECT errors --> "The return type 'bool' is not compatible with the operation's type 'int32'" at "return true;"
+	/* XPECT errors ---
+		"Incompatible types: bool, int32" at "return true;"
+		"Incompatible types: bool, int32" at "true"
+		"The return type 'bool' is not compatible with the operation's type 'int32'" at "true"
+	--- */
 	return true;
 }
 
-/* XPECT errors ---
-"Could not infer common return type from operation's return statements" at "fn impossibleInference() {  	if (true) {  		return "";   	}  	return true;  }"
-"Could not infer common return type from operation's return statements" at "fn impossibleInference() {  	if (true) {  		return "";   	}  	return true;  }"
---- */
+
 fn impossibleInference() {
 	if (true) {
+		/* XPECT errors ---
+		"Incompatible types: string, void" at """"
+		--- */
 		return "";
 	}
+		/* XPECT errors ---
+		"Could not infer common return type from operation's return statements" at "true"
+		"Could not infer common return type from operation's return statements" at "true"
+		"Could not infer common return type from operation's return statements" at "true"
+		"Could not infer common return type from operation's return statements" at "true"
+		"Incompatible types: bool, void" at "true"
+		--- */
 	return true;
 }
  
@@ -75,7 +90,10 @@ fn returnInVoid() : void {
 
 fn returnWithoutValudInNoVoidFunction() : uint32 {
 	if(true) {
-		// XPECT errors --> "The return type 'void' is not compatible with the operation's type 'uint32'" at "return;"
+		/* XPECT errors ---
+			"Incompatible types: void, uint32" at "return;"
+			"The return type 'void' is not compatible with the operation's type 'uint32'" at "return;"
+		--- */
 		return;
 	}
 }
@@ -163,7 +181,7 @@ fn returnArray2(): array<int32> {
 }
 
 //XPECT errors --> "Could not infer the size of the function's return." at "returnArrayBad"
-fn returnArrayBad(s: int32): array<int32> {
+fn returnArrayBad(s: uint32): array<int32> {
 	return new array<int32>(size = s);
 }
 

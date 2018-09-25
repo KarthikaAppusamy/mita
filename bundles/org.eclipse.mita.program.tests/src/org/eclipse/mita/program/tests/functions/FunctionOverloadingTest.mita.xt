@@ -45,7 +45,7 @@ fn main() {
 	// XPECT inferredType --> uint16
 	let x5 = i5.overloadingTest();
 	
-	let x6 = overloadingTest(x = 10);
+	let x6 = overloadingTest(x = 10 as int8);
 	
 	
 	// XPECT inferredType --> uint16
@@ -78,7 +78,7 @@ fn main2() {
 	// XPECT inferredType --> uint16
 	let x7 = i5.g().overloadingTest();
 	
-	let x8 = overloadingTest(x = g(10));
+	let x8 = overloadingTest(x = g(10 as int8));
 	
 	
 	// XPECT inferredType --> uint16

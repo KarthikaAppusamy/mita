@@ -101,6 +101,7 @@ public class OperationsLinker {
 	}
 
 	protected List<InferenceResult> getArgumentTypes(Operation operation, ArgumentExpression expression) {
+		inferrer.setIsLinking(true);
 		List<Expression> orderedExpressions = ArgumentSorter.getOrderedExpressions(expression.getArguments(),
 				operation);
 		if (expression instanceof FeatureCall) {
@@ -127,6 +128,7 @@ public class OperationsLinker {
 	}
 
 	protected boolean isCallableByName(IEObjectDescription operation, List<InferenceResult> argumentTypes) {
+		inferrer.setIsLinking(true);
 		List<String> parameterTypes = Arrays.asList(operationUserDataHelper.getParameterTypeNames(operation));
 
 		if (argumentTypes.size() != parameterTypes.size())

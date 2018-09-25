@@ -492,13 +492,11 @@ class StatementGenerator {
 				return generator.generateNewInstance(typeOf, initialization);
 			} else if (initialization instanceof ArrayAccessExpression) {
 				return generator.generateExpression(typeOf, target, op, initialization);
-			} else if (initialization instanceof ElementReferenceExpression) {
-				if(initialization.isOperationCall) {
-					return generateFunCallStmt(varName, typeOf, initialization);
-				}
-				else {
-					return generator.generateExpression(typeOf, target, op, initialization);
-				}
+			} else if (initialization instanceof ElementReferenceExpression && (initialization as ElementReferenceExpression).isOperationCall) {
+				return generateFunCallStmt(varName, typeOf, initialization as ElementReferenceExpression);
+			}
+			else {
+				return generator.generateExpression(typeOf, target, op, initialization);
 			}
 		} else if (initialization instanceof ElementReferenceExpression) {
 			if(initialization.isOperationCall) {
@@ -575,7 +573,7 @@ class StatementGenerator {
 		// generate initialization
 		result.children += codeFragmentProvider.create('''«"\n"»''');
 		result.children += stmt.initializationCode;
-
+		
 		return result;
 	}
 

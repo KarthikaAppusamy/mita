@@ -19,6 +19,7 @@ import java.util.List
 import java.util.Map
 import java.util.TreeMap
 import org.eclipse.emf.ecore.EObject
+import org.eclipse.emf.ecore.EStructuralFeature
 import org.eclipse.emf.ecore.util.EcoreUtil.UsageCrossReferencer
 import org.eclipse.mita.base.expressions.Argument
 import org.eclipse.mita.base.expressions.ArgumentExpression
@@ -27,6 +28,7 @@ import org.eclipse.mita.base.expressions.BoolLiteral
 import org.eclipse.mita.base.expressions.DoubleLiteral
 import org.eclipse.mita.base.expressions.ElementReferenceExpression
 import org.eclipse.mita.base.expressions.Expression
+import org.eclipse.mita.base.expressions.ExpressionsPackage
 import org.eclipse.mita.base.expressions.FeatureCall
 import org.eclipse.mita.base.expressions.FloatLiteral
 import org.eclipse.mita.base.expressions.IntLiteral
@@ -34,13 +36,15 @@ import org.eclipse.mita.base.expressions.inferrer.ExpressionsTypeInferrer
 import org.eclipse.mita.base.scoping.MitaTypeSystem
 import org.eclipse.mita.base.types.AnonymousProductType
 import org.eclipse.mita.base.types.HasAccessors
+import org.eclipse.mita.base.types.NamedElement
 import org.eclipse.mita.base.types.Operation
 import org.eclipse.mita.base.types.Property
 import org.eclipse.mita.base.types.StructureType
 import org.eclipse.mita.base.types.SumAlternative
 import org.eclipse.mita.base.types.SumType
+import org.eclipse.mita.base.types.Type
 import org.eclipse.mita.base.types.TypeParameter
-import org.eclipse.mita.base.types.inferrer.ITypeSystemInferrer.InferenceResult
+import org.eclipse.mita.base.types.TypesPackage
 import org.eclipse.mita.base.types.typesystem.ITypeSystem
 import org.eclipse.mita.base.types.validation.IValidationIssueAcceptor
 import org.eclipse.mita.base.types.validation.IValidationIssueAcceptor.ListBasedValidationIssueAcceptor
@@ -61,6 +65,7 @@ import org.eclipse.mita.program.IsDeconstructor
 import org.eclipse.mita.program.ModalityAccess
 import org.eclipse.mita.program.NewInstanceExpression
 import org.eclipse.mita.program.ProgramBlock
+import org.eclipse.mita.program.ProgramPackage
 import org.eclipse.mita.program.ReferenceExpression
 import org.eclipse.mita.program.ReturnStatement
 import org.eclipse.mita.program.SignalInstance
@@ -76,11 +81,14 @@ import static org.eclipse.mita.base.scoping.MitaTypeSystem.ARRAY_TYPE
 import static org.eclipse.mita.base.scoping.MitaTypeSystem.BOOL_TYPE
 import static org.eclipse.mita.base.scoping.MitaTypeSystem.DOUBLE_TYPE
 import static org.eclipse.mita.base.scoping.MitaTypeSystem.FLOAT_TYPE
+import static org.eclipse.mita.base.scoping.MitaTypeSystem.INT32_TYPE
 import static org.eclipse.mita.base.scoping.MitaTypeSystem.MODALITY_TYPE
 import static org.eclipse.mita.base.scoping.MitaTypeSystem.REFERENCE_TYPE
-import static org.eclipse.mita.base.scoping.MitaTypeSystem.INT32_TYPE
 import static org.eclipse.mita.base.scoping.MitaTypeSystem.SIGINST_TYPE
 import static org.eclipse.mita.base.types.typesystem.ITypeSystem.VOID
+
+import static extension org.eclipse.mita.base.util.BaseUtils.zip
+import org.eclipse.mita.base.types.inferrer.ITypeSystemInferrer.InferenceResult
 
 class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 
@@ -100,11 +108,21 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 	public static final String BOOL_LITERAL_TYPE = BOOL_TYPE;
 	public static final String ARRAY_LITERAL_TYPE = ARRAY_TYPE;
 
+	boolean isLinking = false;
+
 	@Inject
 	extension ExtensionMethodHelper
 	
 	@Inject 
 	extension ProgramDslTypeValidator programDslTypeValidator
+
+	override infer(EObject obj, IValidationIssueAcceptor acceptor) {
+		val result = super.infer(obj, acceptor);
+		val feature = if(obj instanceof NamedElement) {
+			TypesPackage.eINSTANCE.namedElement_Name;
+		}
+		obj.replace(feature, result, obj).replaceIntegers;
+	}
 
 	override protected InferenceResult inferTypeDispatch(EObject object) {
 		val result = super.inferTypeDispatch(object)
@@ -151,8 +169,12 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 			return refType.bindings.head;
 		} else {
 			this.acceptor.accept(
-				new ValidationIssue(Severity.ERROR, DEREFERENCE_OF_NON_REFERENCE_MSG, e,
-					DEREFERENCE_OF_NON_REFERENCE_CODE));
+				new ValidationIssue(
+					Severity.ERROR, 
+					DEREFERENCE_OF_NON_REFERENCE_MSG, 
+					e, ProgramPackage.eINSTANCE.dereferenceExpression_Expression, 
+					DEREFERENCE_OF_NON_REFERENCE_CODE
+				));
 			return null;
 		}
 	}
@@ -223,28 +245,115 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 	def doInfer(VariableDeclaration e) {
 		var explicitType = e.typeSpecifier.inferTypeDispatch;
 		assertNotType(explicitType, VARIABLE_VOID_TYPE, getResultFor(VOID));
-		if (e.initialization === null)
-			return explicitType;
-
+		if (e.initialization === null) {
+			return e.replace(TypesPackage.eINSTANCE.typedElement_TypeSpecifier, explicitType, e);
+		}
 		val implicitType = e.initialization.inferTypeDispatch;
 		if (explicitType !== null) {
 			// there is an explicit type specification, so make sure the initialization expression is type compatible
 			assertAssignable(explicitType, implicitType, String.format(VARIABLE_DECLARATION, implicitType, explicitType));
 			assertWithinRange(explicitType, e.initialization, e);
-			return explicitType;
+			return e.replace(TypesPackage.eINSTANCE.typedElement_TypeSpecifier, explicitType, e);
 		} else {
 			// there is no explicit type specification, so return the inferred type of the initialization expression
-			return implicitType.replace(e);
+			return e.initialization.replace(null, implicitType, e);
 		}
 	}
 	
-	def InferenceResult replace(InferenceResult result, VariableDeclaration object) {
+	dispatch def InferenceResult replace(EObject source, EStructuralFeature feature, InferenceResult result, ReturnStatement object) {
+		val fun = EcoreUtil2.getContainerOfType(object, Operation);
+		val funType = fun.inferTypeDispatch;
+		return unify(source, feature, result, funType);
+	}
+	dispatch def InferenceResult replace(EObject source, EStructuralFeature feature, InferenceResult result, VariableDeclaration object) {
 		if (registry.isSame(result?.type, registry.getType(ITypeSystem.INTEGER))) {
 			return object.doInferIntegerByUse(result)
 		} else if (result !== null && !result.bindings.empty) {
-			return InferenceResult.from(result.type, result.bindings.map[it.replace(null)])
+			return InferenceResult.from(result.type, result.bindings.map[it.replaceIntegers])
 		}
 		return result
+	}
+	dispatch def InferenceResult replace(EObject source, EStructuralFeature feature, InferenceResult result, Argument arg) {
+		val typ = if(arg.parameter !== null) {
+			arg.parameter.inferTypeDispatch
+		} else if(!isLinking) {
+			val types_args = ModelUtils.getFunctionCallArguments(arg.eContainer);
+			types_args.findFirst[it.value === arg]?.key.inferTypeDispatch
+		} else {
+			return source._replace(feature, result, arg as EObject);
+		}
+		
+		return unify(source, feature, result, typ);
+	}
+	
+	dispatch def InferenceResult replace(EObject source, EStructuralFeature feature, InferenceResult result, EObject object) {
+		val container = object.eContainer;
+		if(container !== null) {
+			return source.replace(feature, result, container);
+		}
+		return result;
+	}
+	
+	def InferenceResult replaceIntegers(InferenceResult result) {
+		if(result === null) {
+			return result;
+		}
+		return InferenceResult.from(result?.type.replaceIntegers, result?.bindings?.map[it.replaceIntegers]?.toList);
+	}
+	def replaceIntegers(Type t) {
+		if(registry.isSame(t, registry.getType(ITypeSystem.INTEGER))) {
+			return registry.getType(INT_LITERAL_TYPE);
+		}
+		return t;
+	}
+
+	def InferenceResult unify(EObject source, EStructuralFeature feature, InferenceResult r1, InferenceResult r2) {
+		if(r1 === null || r2 === null) {
+			return r1 ?: r2;
+		}
+		val t1 = r1.type;
+		val t2 = r2.type;
+		
+		val resultType = if(!t1.abstract && !t2.abstract) {
+			if(!registry.isSuperType(t1, t2)) { 
+				acceptor.accept(new ValidationIssue(Severity.ERROR, '''Incompatible types: «t1», «t2»''', source, feature, ""));
+				return r1;
+			}
+			t1;
+		} else if(t1.abstract) {
+			t2
+		}
+		else {
+			t1
+		}
+		
+		val bindings = unifyBindings(source, feature, resultType, r1, r2);
+		
+		return InferenceResult.from(resultType ?: t1 ?: t2, bindings.toList);
+	}
+
+	def unifyBindings(EObject source, EStructuralFeature feature, Type t, InferenceResult r1, InferenceResult r2) {
+		val b1_b2 = if(registry.isSame(t, registry.getType(MitaTypeSystem.OPTINAL_TYPE))) {
+			if(r1.bindings.empty && r2.bindings.empty) {
+				acceptor.accept(new ValidationIssue(Severity.ERROR, '''Both bindings empty: «r1», «r2»''', source, feature, ""))
+				return #[];
+			}
+			(if(r1.bindings.empty) {
+				#[r1];
+			}
+			else {
+				r1.bindings;
+			}) -> (if(r2.bindings.empty) {
+				#[r2];
+			}
+			else {
+				r2.bindings;
+			})
+		}
+		else {
+			r1.bindings -> r2.bindings;
+		}
+		b1_b2.key.zip(b1_b2.value).map[t1_t2 | unify(source, feature, t1_t2.key, t1_t2.value)]
 	}
 
 	def protected doInferIntegerByUse(VariableDeclaration declaration, InferenceResult original) {
@@ -253,12 +362,15 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 //		val result = usages.reduce[registry.getCommonType($0, $1)]
 
 		if (declaration !== null) {
-			val firstUsage = UsageCrossReferencer.find(declaration, declaration.eResource).head?.EObject?.inferByUsage
-			if (firstUsage !== null) {
+			val firstUsage = if(!isLinking) {
+				UsageCrossReferencer.find(declaration, declaration.eResource).head?.EObject
+			}
+			val firstUsageType = firstUsage?.inferByUsage
+			if (firstUsageType !== null) {
 				val issueAcceptor = new ListBasedValidationIssueAcceptor
-				assertAssignable(firstUsage, original, "", issueAcceptor)
+				assertAssignable(firstUsageType, original, "", issueAcceptor)
 				if (issueAcceptor.traces.empty) {
-					return firstUsage;
+					return firstUsageType;
 				}
 			}
 		}
@@ -277,6 +389,10 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 		var typedElement = EcoreUtil2.getContainerOfType(reference, Property)
 		if (typedElement !== null) {
 			return typedElement.inferTypeDispatch
+		}
+		var assignment = EcoreUtil2.getContainerOfType(reference, AssignmentExpression);
+		if(assignment !== null) {
+			return assignment.varRef.inferTypeDispatch;
 		}
 	}
 
@@ -392,7 +508,7 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 		if(range !== null) {
 			if(staticIntValue < range.get(0) || staticIntValue > range.get(1)) {
 				val errorMessage = String.format(INTEGER_VALUE_OUT_OF_RANGE_MSG, range.get(0), range.get(1));
-				acceptor.accept(new ValidationIssue(Severity.ERROR, errorMessage, target, INTEGER_VALUE_OUT_OF_RANGE_CODE));
+				acceptor.accept(new ValidationIssue(Severity.ERROR, errorMessage, target, null, INTEGER_VALUE_OUT_OF_RANGE_CODE));
 			}
 		}
 	}
@@ -433,6 +549,9 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 	}
 
 	def doInfer(ReturnStatement returnStatement) {
+		if(returnStatement.value === null) {
+			return InferenceResult.from(registry.getType(VOID));
+		}
 		return inferTypeDispatch(returnStatement.value);
 	}
 
@@ -490,7 +609,7 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 		// infer common type of all return statements
 		for (var i = 1; i < returnStatements.size(); i++) {
 			val next = doInfer(returnStatements.get(i));
-			returnType = getCommonReturnType(returnType, next);
+			returnType = getCommonReturnType(returnStatements.get(i), returnType, next);
 			if (returnType === null) {
 				return getResultFor(VOID);
 			}
@@ -501,8 +620,10 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 		return returnType;
 	}
 
-	protected def InferenceResult getCommonReturnType(InferenceResult left, InferenceResult right) {
-		assertCompatible(left, right, NO_RETURN_TYPE_INFERRED);
+	protected def InferenceResult getCommonReturnType(ReturnStatement returnStmt, InferenceResult left, InferenceResult right) {
+		typeValidator.assertCompatible(left, right, NO_RETURN_TYPE_INFERRED, 
+			[issue | acceptor.accept(new ValidationIssue(issue.getSeverity, issue.getMessage, returnStmt, ProgramPackage.eINSTANCE.returnStatement_Value, issue.getIssueCode))]
+		);
 		val commonType = registry.getCommonType(left.getType(), right.getType());
 		if (commonType === null) {
 			return null;
@@ -532,6 +653,10 @@ class ProgramDslTypeInferrer extends ExpressionsTypeInferrer {
 				adjustedTypeParameterMapping.put(tp, t)
 		]
 		return adjustedTypeParameterMapping
+	}
+	
+	override setIsLinking(boolean newIsLinking) {
+		this.isLinking = newIsLinking;
 	}
 
 }

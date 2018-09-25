@@ -119,7 +119,7 @@ class GeneratorUtils {
 	}
 	
 	private def dispatch String getUniqueIdentifierInternal(EObject obj) {
-		return obj.baseName?:"";
+		return obj.baseName ?: obj.eClass.name;
 	}
 
 	def dispatch String getHandlerName(EventHandlerDeclaration event) {
@@ -345,6 +345,9 @@ class GeneratorUtils {
 	
 	def dispatch String getBaseName(ModalityAccessPreparation modality) {
 		return '''«modality.systemResource.baseName»ModalityPreparation'''
+	}
+	def dispatch String getBaseName(Object p) {
+		return null;	
 	}
 	
 	def generateHeaderComment(CompilationContext context)'''

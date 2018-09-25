@@ -13,10 +13,10 @@
 
 package org.eclipse.mita.program.generator.transformation
 
+import com.google.inject.Inject
 import org.eclipse.emf.ecore.EObject
 import org.eclipse.mita.base.expressions.BinaryExpression
 import org.eclipse.mita.base.expressions.ConditionalExpression
-import org.eclipse.mita.base.expressions.ElementReferenceExpression
 import org.eclipse.mita.base.expressions.Expression
 import org.eclipse.mita.base.expressions.ExpressionsFactory
 import org.eclipse.mita.base.expressions.LogicalOperator
@@ -25,11 +25,14 @@ import org.eclipse.mita.program.AbstractStatement
 import org.eclipse.mita.program.ProgramBlock
 import org.eclipse.mita.program.ProgramFactory
 import org.eclipse.mita.program.SystemResourceSetup
-import org.eclipse.mita.program.VariableDeclaration
+import org.eclipse.mita.program.generator.GeneratorUtils
 import org.eclipse.mita.program.model.ModelUtils
 import org.eclipse.xtext.EcoreUtil2
 
 abstract class AbstractUnravelingStage extends AbstractTransformationStage {
+	
+	@Inject
+	GeneratorUtils generatorUtils;
 	
 	override getOrder() {
 		ORDER_LATE
@@ -174,37 +177,13 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 		} else {
 			initialization;
 		}
-		
-//		val initializationStmt = if(logicalBinaryExpression !== null && logicalBinaryExpression.operator instanceof LogicalOperator) {
-//			if(logicalBinaryExpression.leftOperand === obj || logicalBinaryExpression.leftOperand?.eAllContents.findFirst[it === obj] !== null) {
-//				initialization;
-//			}
-//			else {
-//				val ifStmt = ProgramFactory.eINSTANCE.createIfStatement();
-//				ifStmt.condition = getCondition(obj, logicalBinaryExpression);
-//				ifStmt.then = ProgramFactory.eINSTANCE.createProgramBlock() => [ block |
-//					block.content += initialization;
-//				]
-//				ifStmt;
-//			}
-//		} else if(conditionalExpression !== null && (conditionalExpression.trueCase.eAllContents + conditionalExpression.falseCase.eAllContents).findFirst[it === obj] !== null) {
-//			val negate = conditionalExpression.falseCase === obj || conditionalExpression.falseCase?.eAllContents.findFirst[it === obj] !== null;
-//			val ifStmt = ProgramFactory.eINSTANCE.createIfStatement();
-//			ifStmt.condition = getCondition(conditionalExpression, negate);
-//			ifStmt.then = ProgramFactory.eINSTANCE.createProgramBlock() => [ block |
-//				block.content += initialization;
-//			]
-//			ifStmt;
-//		} else {
-//			initialization;
-//		}
-		
+				
 		/* We have to find the insertion point for the resultVariable before we replace the unraveling object with the
 		 * reference to the result variable and thus make it impossible to find the original context.
 		 */
 		val originalContext = findOriginalContext(obj);
 		obj.replaceWith(resultVariableReference2);
-		
+		 
 		/* Inserting the result variable itself is a post transformation as it modifies the children
 		 * of its container and thus would lead to a ConcurrentModificationException.
 		 * 
@@ -246,25 +225,26 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 	}
 	
 	protected def getUniqueVariableName(Expression unravelingObject) {
-		val variableDeclarationContainer = EcoreUtil2.getContainerOfType(unravelingObject, VariableDeclaration);
-		val uid = String.valueOf(unravelingObject.hashCode);
-		val resultName = (if(variableDeclarationContainer === null) {
-			val candidate = EcoreUtil2.getID(unravelingObject);
-			if(candidate === null) {
-				if(unravelingObject instanceof ElementReferenceExpression) {
-					EcoreUtil2.getID(unravelingObject.reference);
-				} else {
-					null;
-				}
-			} else {
-				candidate;
-			}
-		} else {
-			variableDeclarationContainer.name;
-		})?.toLowerCase?.split(".")?.last
-		val resultSuffix = if(resultName === null) 'result' else 'Result';
-		val result = '''«resultName»«resultSuffix»«uid»''';
-		return result;
+		return generatorUtils.getUniqueIdentifier(unravelingObject);
+//		val variableDeclarationContainer = EcoreUtil2.getContainerOfType(unravelingObject, VariableDeclaration);
+//		val uid = String.valueOf(unravelingObject.hashCode);
+//		val resultName = (if(variableDeclarationContainer === null) {
+//			val candidate = EcoreUtil2.getID(unravelingObject);
+//			if(candidate === null) {
+//				if(unravelingObject instanceof ElementReferenceExpression) {
+//					EcoreUtil2.getID(unravelingObject.reference);
+//				} else {
+//					null;
+//				}
+//			} else {
+//				candidate;
+//			}
+//		} else {
+//			variableDeclarationContainer.name;
+//		})?.toLowerCase?.split(".")?.last
+//		val resultSuffix = if(resultName === null) 'result' else 'Result';
+//		val result = '''«resultName»«resultSuffix»«uid»''';
+//		return result;
 	}
 	
 	protected def findOriginalContext(EObject unravelingObject) {
