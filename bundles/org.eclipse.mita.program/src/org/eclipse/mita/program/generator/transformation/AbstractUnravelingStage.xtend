@@ -20,6 +20,7 @@ import org.eclipse.mita.base.expressions.ElementReferenceExpression
 import org.eclipse.mita.base.expressions.Expression
 import org.eclipse.mita.base.expressions.ExpressionsFactory
 import org.eclipse.mita.base.expressions.LogicalOperator
+import org.eclipse.mita.base.types.inferrer.ITypeSystemInferrer.InferenceResult
 import org.eclipse.mita.program.AbstractStatement
 import org.eclipse.mita.program.ProgramBlock
 import org.eclipse.mita.program.ProgramFactory
@@ -108,6 +109,7 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 	}
 	
 	protected def void doUnravel(Expression obj) {
+		val typeOf = typeInferrer.infer(obj);
 		/* Unraveling means that we pull an expression out of its tree and place it in a variable created for
 		 * this expression beforehand. By default we use the original expression (the expression being unraveled)
 		 * as initialization for this result variable.
@@ -125,7 +127,7 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 		 * The variable is not initialized at first but only after it has been declared. 
 		 * This is the only way to allow for easy unraveling while correctly compiling f() && g()
 		 */
-		val resultVariable = createResultVariable(obj);
+		val resultVariable = createResultVariable(obj, typeOf);
 		/* We create two references to the variable:
 		 * - One for usage in chained conditional evaluations, such as f() && g()
 		 * - One for the original location
@@ -234,10 +236,10 @@ abstract class AbstractUnravelingStage extends AbstractTransformationStage {
 		return copy;
 	}
 	
-	protected def AbstractStatement createResultVariable(Expression unravelingObject) {
+	protected def AbstractStatement createResultVariable(Expression unravelingObject, InferenceResult typeOf) {
 		val resultVariableName = getUniqueVariableName(unravelingObject);
 		val resultVariable = ProgramFactory.eINSTANCE.createVariableDeclaration;
-		val resultVariableType = ModelUtils.toSpecifier(typeInferrer.infer(unravelingObject));
+		val resultVariableType = ModelUtils.toSpecifier(typeOf);
 		resultVariable.name = resultVariableName;
 		resultVariable.typeSpecifier = resultVariableType;
 		return resultVariable;

@@ -102,6 +102,7 @@ import org.eclipse.xtext.EcoreUtil2
 import org.eclipse.xtext.generator.trace.node.CompositeGeneratorNode
 import org.eclipse.xtext.generator.trace.node.IGeneratorNode
 import org.eclipse.xtext.generator.trace.node.Traced
+import org.eclipse.mita.base.types.inferrer.ITypeSystemInferrer.InferenceResult
 
 class StatementGenerator {
 
@@ -417,33 +418,7 @@ class StatementGenerator {
 	}
 
 	@Traced dispatch def IGeneratorNode code(AssignmentExpression stmt) {
-		val inference = typeInferrer.infer(stmt);
-		val expressionType = inference?.type;
-		val expression = stmt.expression; 
-		
-		if (expressionType instanceof GeneratedType) {
-			val generator = registry.getGenerator(expressionType);
-			val cf = generator.generateExpression(ModelUtils.toSpecifier(inference), stmt.varRef, stmt.operator, stmt.expression);
-			return '''«cf»''';
-		} else if (expression instanceof ElementReferenceExpression) {
-				val reference = expression.reference;
-				if (reference instanceof FunctionDefinition) {
-				// we're assigning the result of a function call to this variable
-				return '''
-					«generateFunctionCall(reference as Operation, codeFragmentProvider.create('''&«stmt.varRef.code»'''), expression).noNewline.noTerminator»;
-				'''
-			} else if(reference instanceof NativeFunctionDefinition) {
-				if(reference.checked) {
-					return '''«reference.generateNativeFunctionCallChecked(codeFragmentProvider.create('''&«stmt.varRef.code»'''), expression).noTerminator»;'''
-				}
-				else {
-					return '''«stmt.varRef.code» «stmt.operator.literal» «reference.generateNativeFunctionCallUnchecked(expression).noTerminator»;'''
-				}
-			}
-		} 
-		
-		// Handle everything else
-		return '''«stmt.varRef.code.noTerminator» «stmt.operator» «stmt.expression.code.noTerminator»;'''
+		return '''«stmt.initializationCode.noTerminator»'''
 
 	}
 
@@ -480,11 +455,11 @@ class StatementGenerator {
 	}
 	
 	
-	def IGeneratorNode generateFunCallStmt(String variableName, TypeSpecifier inferenceResult, ElementReferenceExpression initialization) {
+	def IGeneratorNode generateFunCallStmt(IGeneratorNode variableName, TypeSpecifier inferenceResult, ElementReferenceExpression initialization) {
 		val reference = initialization.reference;
 		if (reference instanceof FunctionDefinition) {
 			return codeFragmentProvider.create('''
-				«generateFunctionCall(reference, codeFragmentProvider.create('''&«variableName»'''), initialization)»
+				«generateFunctionCall(reference, codeFragmentProvider.create('''&«variableName»'''), initialization).noTerminator»;
 			''')
 		} else if (reference instanceof GeneratedFunctionDefinition) {
 			return codeFragmentProvider.create('''
@@ -493,36 +468,45 @@ class StatementGenerator {
 		} else if(reference instanceof NativeFunctionDefinition) {
 			if(reference.checked) {
 				return codeFragmentProvider.create('''
-				«reference.generateNativeFunctionCallChecked(codeFragmentProvider.create('''&«variableName»'''), initialization)»
+				«reference.generateNativeFunctionCallChecked(codeFragmentProvider.create('''&«variableName»'''), initialization).noTerminator»;
 				''')
 			}
 			else {
 				return codeFragmentProvider.create('''
-				«variableName» = «reference.generateNativeFunctionCallUnchecked(initialization)»;''')
+				«variableName» = «reference.generateNativeFunctionCallUnchecked(initialization).noTerminator»;''')
 			}
 		}	
 	}
 	
-	def IGeneratorNode initializationCode(VariableDeclaration stmt) {
-		val initialization = stmt.initialization;
-		val inferenceResult = stmt.inferType;
-		val type = inferenceResult?.type;
-		val typeSpec = ModelUtils.toSpecifier(typeInferrer.infer(stmt));	
-		
+	dispatch def IGeneratorNode initializationCode(VariableDeclaration stmt) {
+		return initializationCode(stmt, stmt.inferType, codeFragmentProvider.create('''«stmt.name»'''), AssignmentOperator.ASSIGN, stmt.initialization);
+	}
+	dispatch def IGeneratorNode initializationCode(AssignmentExpression expr) {
+		return initializationCode(expr.varRef, expr.inferType, codeFragmentProvider.create('''«expr.varRef.code»'''), expr.operator, expr.expression);
+	}
+	def IGeneratorNode initializationCode(EObject target, TypeSpecifier typeOf, IGeneratorNode varName, AssignmentOperator op, Expression initialization) {
+		val type = typeOf?.type;
 		if (type instanceof GeneratedType) {
 			val generator = registry.getGenerator(type);
 			if (initialization instanceof NewInstanceExpression) {
-				return generator.generateNewInstance(typeSpec, initialization);
+				return generator.generateNewInstance(typeOf, initialization);
 			} else if (initialization instanceof ArrayAccessExpression) {
-				val op = AssignmentOperator.ASSIGN;
-				return generator.generateExpression(typeSpec, stmt, op, initialization);
+				return generator.generateExpression(typeOf, target, op, initialization);
 			} else if (initialization instanceof ElementReferenceExpression) {
 				if(initialization.isOperationCall) {
-					return generateFunCallStmt(stmt.name, inferenceResult, initialization);
+					return generateFunCallStmt(varName, typeOf, initialization);
+				}
+				else {
+					return generator.generateExpression(typeOf, target, op, initialization);
 				}
 			}
 		} else if (initialization instanceof ElementReferenceExpression) {
-			return generateFunCallStmt(stmt.name, inferenceResult, initialization);
+			if(initialization.isOperationCall) {
+				return generateFunCallStmt(varName, typeOf, initialization);	
+			}
+			else {
+				return target.trace('''«varName» = «initialization»''');
+			}
 		}
 		return CodeFragment.EMPTY;
 	}

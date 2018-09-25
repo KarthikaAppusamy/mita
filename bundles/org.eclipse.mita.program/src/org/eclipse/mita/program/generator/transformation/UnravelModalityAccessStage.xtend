@@ -13,16 +13,17 @@
 
 package org.eclipse.mita.program.generator.transformation
 
-import org.eclipse.mita.program.GeneratedFunctionDefinition
-import org.eclipse.mita.program.ProgramFactory
 import org.eclipse.emf.ecore.EObject
+import org.eclipse.mita.base.expressions.ArgumentExpression
 import org.eclipse.mita.base.expressions.ElementReferenceExpression
 import org.eclipse.mita.base.expressions.Expression
-import org.eclipse.mita.base.expressions.ArgumentExpression
 import org.eclipse.mita.base.expressions.FeatureCall
-import org.eclipse.mita.platform.Modality
+import org.eclipse.mita.base.types.inferrer.ITypeSystemInferrer.InferenceResult
 import org.eclipse.mita.platform.AbstractSystemResource
+import org.eclipse.mita.platform.Modality
+import org.eclipse.mita.program.GeneratedFunctionDefinition
 import org.eclipse.mita.program.ModalityAccessPreparation
+import org.eclipse.mita.program.ProgramFactory
 
 class UnravelModalityAccessStage extends AbstractUnravelingStage {
 	
@@ -44,7 +45,7 @@ class UnravelModalityAccessStage extends AbstractUnravelingStage {
 		return false;
 	}
 	
-	override protected createResultVariable(Expression unravelingObject) {
+	override protected createResultVariable(Expression unravelingObject, InferenceResult typeOf) {
 		/* TODO: This code makes very strict assumptions about the structure of the rewritten function call.
 		 *       As such this code is very likely to break in the future.
 		 */

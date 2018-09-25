@@ -13,8 +13,17 @@
 
 package org.eclipse.mita.library.stdlib
 
+import com.google.inject.Inject
+import java.util.LinkedList
+import org.eclipse.emf.ecore.EObject
+import org.eclipse.mita.base.expressions.AssignmentOperator
+import org.eclipse.mita.base.expressions.ElementReferenceExpression
+import org.eclipse.mita.base.types.Operation
+import org.eclipse.mita.base.types.TypeSpecifier
+import org.eclipse.mita.base.types.inferrer.ITypeSystemInferrer
 import org.eclipse.mita.program.InterpolatedStringExpression
 import org.eclipse.mita.program.NewInstanceExpression
+import org.eclipse.mita.program.ReturnStatement
 import org.eclipse.mita.program.VariableDeclaration
 import org.eclipse.mita.program.generator.AbstractFunctionGenerator
 import org.eclipse.mita.program.generator.AbstractTypeGenerator
@@ -28,18 +37,9 @@ import org.eclipse.mita.program.generator.transformation.EscapeWhitespaceInStrin
 import org.eclipse.mita.program.inferrer.ElementSizeInferrer
 import org.eclipse.mita.program.inferrer.ValidElementSizeInferenceResult
 import org.eclipse.mita.program.model.ModelUtils
-import com.google.inject.Inject
-import java.util.LinkedList
-import org.eclipse.emf.ecore.EObject
 import org.eclipse.xtext.generator.trace.node.CompositeGeneratorNode
+import org.eclipse.xtext.generator.trace.node.IGeneratorNode
 import org.eclipse.xtext.generator.trace.node.NewLineNode
-import org.eclipse.mita.base.expressions.AssignmentOperator
-import org.eclipse.mita.base.expressions.ElementReferenceExpression
-import org.eclipse.mita.base.types.Operation
-import org.eclipse.mita.base.types.TypeSpecifier
-import org.eclipse.mita.base.types.inferrer.ITypeSystemInferrer
-import org.eclipse.mita.program.ReturnStatement
-import org.eclipse.mita.program.GeneratedFunctionDefinition
 
 class StringGenerator extends AbstractTypeGenerator {
 	
@@ -282,7 +282,7 @@ class StringGenerator extends AbstractTypeGenerator {
 		@Inject
 		protected ElementSizeInferrer sizeInferrer
 	
-		override generate(ElementReferenceExpression ref, String resultVariableName) {
+		override generate(ElementReferenceExpression ref, IGeneratorNode resultVariableName) {
 			val variable = ModelUtils.getArgumentValue(ref.reference as Operation, ref, 'self');
 			val varref = if(variable instanceof ElementReferenceExpression) {
 				val varref = variable.reference;
