@@ -233,7 +233,7 @@ class MqttGenerator extends AbstractSystemResourceGenerator {
 		return retcode;
 		''');
 		if(auth instanceof SumTypeRepr) {
-			if(auth.name == "Login") {
+			if(auth.name == "Login" || auth.name == "Authenticated") {
 				val username = auth.properties.get("username")?.code;
 				val password = auth.properties.get("password")?.code;
 				result.setPreamble('''
@@ -358,22 +358,21 @@ class MqttGenerator extends AbstractSystemResourceGenerator {
 	
 	override generateSignalInstanceSetter(SignalInstance signalInstance, String resultName) {
 		val qosLevel = #[ "MQTT_QOS_AT_MOST_ONE", "MQTT_QOS_AT_LEAST_ONCE", "MQTT_QOS_EXACTLY_ONCE"	];
-		val qosRaw = ModelUtils.getArgumentValue(signalInstance, 'qos');
-		val qosRawValue = if(qosRaw === null) null else StaticValueInferrer.infer(qosRaw, [ ]);
-		val qos = qosLevel.get((qosRawValue ?: 0) as Integer);
+		val qosRaw = getQosLevel(signalInstance);
+		val qos = qosLevel.get(qosRaw);
 		
 		return codeFragmentProvider.create('''			
 			Retcode_T retcode = RETCODE_OK;
 			
 			static StringDescr_T publishTopicDescription;
-			static char *topic = "«StaticValueInferrer.infer(ModelUtils.getArgumentValue(signalInstance, 'name'), [ ])»";
+			static char *topic = "«getTopicName(signalInstance)»";
 			StringDescr_wrap(&publishTopicDescription, topic);
 			
 			mqttWasPublished = false;
 			/* This is a dummy take. In case of any callback received
 			 * after the previous timeout will be cleared here. */
 			(void) xSemaphoreTake(mqttPublishHandle, 0UL);
-			if (RC_OK != Mqtt_publish(&mqttSession, publishTopicDescription, *value, strlen(*value), (uint8_t) MQTT_QOS_AT_MOST_ONE, false))
+			if (RC_OK != Mqtt_publish(&mqttSession, publishTopicDescription, *value, strlen(*value), (uint8_t) «qos», false))
 			{
 			    retcode = RETCODE(RETCODE_SEVERITY_ERROR, RETCODE_MQTT_PUBLISH_FAILED);
 			}
@@ -393,6 +392,16 @@ class MqttGenerator extends AbstractSystemResourceGenerator {
 			}
 			return retcode;
 		''')
+	}
+	
+	protected def int getQosLevel(SignalInstance instance) {
+		val qosRaw = ModelUtils.getArgumentValue(instance, 'qos');
+		val qosRawValue = if(qosRaw === null) null else StaticValueInferrer.infer(qosRaw, [ ]) as Integer;
+		return Math.min(Math.max(qosRawValue ?: 0, 0), 3);
+	}
+	
+	protected def String getTopicName(SignalInstance instance) {
+		return StaticValueInferrer.infer(ModelUtils.getArgumentValue(instance, 'name'), [ ]) as String;
 	}
 	
 }
